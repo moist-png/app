@@ -16,10 +16,7 @@ const DEFAULT_ADMIN: User = {
 
 // Default invite codes for demo purposes
 const DEFAULT_INVITE_CODES = [
-  'ARBORIST2024',
-  'TREE-EXPERT',
-  'DEMO-ACCESS',
-  'PROFESSIONAL'
+  'Arborpro'
 ];
 
 export const saveInviteCodes = (codes: string[]): void => {
