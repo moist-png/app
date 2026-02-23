@@ -4,6 +4,8 @@ import { TreeInfo } from './TreeInfo';
 import { PhotoGallery } from './PhotoGallery';
 import { NotesSection } from './NotesSection';
 import { ReportPreview } from './ReportPreview';
+import { TreeIdentification } from './TreeIdentification';
+import { TreeHeightEstimator } from './TreeHeightEstimator';
 import { ArrowLeft, Save, FileText, Camera, TreePine, StickyNote, Eye, Download } from 'lucide-react';
 import { exportSingleTreeReport } from '../utils/exportUtils';
 import { canUserEdit } from '../utils/auth';
@@ -19,6 +21,8 @@ export const ReportEditor: React.FC<ReportEditorProps> = ({ report, onSave, onBa
   const [activeTab, setActiveTab] = useState<'info' | 'tree' | 'photos' | 'notes' | 'preview'>(report.siteId ? 'tree' : 'info');
   const [editingReport, setEditingReport] = useState<ArboristReport>(report);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showIdentify, setShowIdentify] = useState(false);
+  const [showHeightEstimator, setShowHeightEstimator] = useState(false);
   const canEdit = canUserEdit();
 
   const handleSave = () => {
@@ -26,7 +30,7 @@ export const ReportEditor: React.FC<ReportEditorProps> = ({ report, onSave, onBa
     const updatedReport = { ...editingReport, updatedAt: Date.now() };
     setEditingReport(updatedReport);
     onSave(updatedReport);
-    onBack(); // Close the editing panel and go back
+    onBack();
   };
 
   const updateReport = (updates: Partial<ArboristReport>) => {
@@ -45,13 +49,24 @@ export const ReportEditor: React.FC<ReportEditorProps> = ({ report, onSave, onBa
     updateReport({ notes });
   };
 
+  const handleApplySpecies = (species: string, commonName: string) => {
+    updateTreeData({ ...editingReport.treeData, species, commonName });
+  };
+
+  const handleApplyHeight = (height: number) => {
+    updateTreeData({ ...editingReport.treeData, height });
+  };
+
+  const handleSaveIdentifyPhotos = (photos: Photo[]) => {
+    updatePhotos([...editingReport.photos, ...photos]);
+  };
+
   const tabs = [
     { id: 'tree', label: 'Tree Data', icon: TreePine },
     { id: 'photos', label: 'Photos', icon: Camera },
     { id: 'notes', label: 'Notes', icon: StickyNote }
   ];
 
-  // Add Report Info tab only for standalone trees (not part of a site)
   if (!editingReport.siteId) {
     tabs.unshift({ id: 'info', label: 'Report Info', icon: FileText });
   }
@@ -92,7 +107,8 @@ export const ReportEditor: React.FC<ReportEditorProps> = ({ report, onSave, onBa
       </div>
 
       <div className="flex-1 flex overflow-hidden">
-        <nav className="w-64 bg-[var(--forest)] border-r border-[var(--border)] p-4">
+        <nav className="w-64 bg-[var(--forest)] border-r border-[var(--border)] p-4 flex flex-col">
+          {/* Tab list */}
           <ul className="space-y-2">
             {tabs.map(tab => {
               const Icon = tab.icon;
@@ -113,6 +129,29 @@ export const ReportEditor: React.FC<ReportEditorProps> = ({ report, onSave, onBa
               );
             })}
           </ul>
+
+          {/* Quick Tools — always visible, regardless of active tab */}
+          {canEdit && (
+            <div className="mt-auto pt-4 border-t border-[var(--border)] space-y-2">
+              <p className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider px-3 mb-1">
+                Quick Tools
+              </p>
+              <button
+                onClick={() => setShowIdentify(true)}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
+              >
+                <span className="text-lg">🔍</span>
+                <span className="text-sm">Identify Species</span>
+              </button>
+              <button
+                onClick={() => setShowHeightEstimator(true)}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
+              >
+                <span className="text-lg">📐</span>
+                <span className="text-sm">Measure Height</span>
+              </button>
+            </div>
+          )}
         </nav>
 
         <div className="flex-1 overflow-auto">
@@ -134,7 +173,7 @@ export const ReportEditor: React.FC<ReportEditorProps> = ({ report, onSave, onBa
                       placeholder="Enter report title"
                     />
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">
                       Client Name
@@ -235,6 +274,22 @@ export const ReportEditor: React.FC<ReportEditorProps> = ({ report, onSave, onBa
           )}
         </div>
       </div>
+
+      {/* Quick Tool modals — rendered at root so they overlay the full editor */}
+      {showIdentify && (
+        <TreeIdentification
+          onClose={() => setShowIdentify(false)}
+          onApply={handleApplySpecies}
+          onSavePhotos={handleSaveIdentifyPhotos}
+          readOnly={!canEdit}
+        />
+      )}
+      {showHeightEstimator && (
+        <TreeHeightEstimator
+          onClose={() => setShowHeightEstimator(false)}
+          onApply={handleApplyHeight}
+        />
+      )}
 
       <ExportModal
         isOpen={showExportModal}

@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { Photo } from '../types';
 import { identifyPlant, PlantNetResult } from '../utils/plantnet';
 
 const PLANTNET_KEY_STORAGE = 'plantnet-api-key';
@@ -6,12 +7,25 @@ const PLANTNET_KEY_STORAGE = 'plantnet-api-key';
 interface TreeIdentificationProps {
   onClose: () => void;
   onApply: (species: string, commonName: string) => void;
+  /** When provided, identified photos can be saved to the report gallery. */
+  onSavePhotos?: (photos: Photo[]) => void;
   readOnly?: boolean;
+}
+
+/** Convert a File to a base64 data URL. */
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => resolve(e.target?.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 export const TreeIdentification: React.FC<TreeIdentificationProps> = ({
   onClose,
   onApply,
+  onSavePhotos,
   readOnly = false,
 }) => {
   const [apiKey, setApiKey] = useState(
@@ -25,6 +39,7 @@ export const TreeIdentification: React.FC<TreeIdentificationProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<PlantNetResult[] | null>(null);
+  const [savePhotosToGallery, setSavePhotosToGallery] = useState(!!onSavePhotos);
 
   const leafInputRef = useRef<HTMLInputElement>(null);
   const treeInputRef = useRef<HTMLInputElement>(null);
@@ -66,6 +81,41 @@ export const TreeIdentification: React.FC<TreeIdentificationProps> = ({
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleApply = async (r: PlantNetResult) => {
+    // Optionally save photos to the report gallery before applying species
+    if (savePhotosToGallery && onSavePhotos && (leafFile || wholeTreeFile)) {
+      try {
+        const photosToSave: Photo[] = [];
+        const now = Date.now();
+        if (leafFile) {
+          const url = await fileToDataUrl(leafFile);
+          photosToSave.push({
+            id: `${now}-leaf-${Math.random().toString(36).slice(2, 9)}`,
+            url,
+            caption: `Leaf — ${r.species.scientificNameWithoutAuthor}`,
+            category: 'other',
+            timestamp: now,
+          });
+        }
+        if (wholeTreeFile) {
+          const url = await fileToDataUrl(wholeTreeFile);
+          photosToSave.push({
+            id: `${now}-tree-${Math.random().toString(36).slice(2, 9)}`,
+            url,
+            caption: `Whole tree — ${r.species.scientificNameWithoutAuthor}`,
+            category: 'crown',
+            timestamp: now,
+          });
+        }
+        onSavePhotos(photosToSave);
+      } catch {
+        // Non-fatal — still apply the species even if photo save fails
+      }
+    }
+    onApply(r.species.scientificNameWithoutAuthor, r.species.commonNames?.[0] ?? '');
+    onClose();
   };
 
   const confidencePct = (score: number) => `${Math.round(score * 100)}%`;
@@ -137,11 +187,7 @@ export const TreeIdentification: React.FC<TreeIdentificationProps> = ({
                 className="w-full aspect-square border-2 border-dashed border-[var(--border)] rounded-xl flex flex-col items-center justify-center gap-2 hover:border-green-500 hover:bg-green-50/5 transition-colors overflow-hidden"
               >
                 {leafPreview ? (
-                  <img
-                    src={leafPreview}
-                    alt="Leaf"
-                    className="w-full h-full object-cover"
-                  />
+                  <img src={leafPreview} alt="Leaf" className="w-full h-full object-cover" />
                 ) : (
                   <>
                     <span className="text-4xl">🍃</span>
@@ -169,11 +215,7 @@ export const TreeIdentification: React.FC<TreeIdentificationProps> = ({
                 className="w-full aspect-square border-2 border-dashed border-[var(--border)] rounded-xl flex flex-col items-center justify-center gap-2 hover:border-green-500 hover:bg-green-50/5 transition-colors overflow-hidden"
               >
                 {wholeTreePreview ? (
-                  <img
-                    src={wholeTreePreview}
-                    alt="Tree"
-                    className="w-full h-full object-cover"
-                  />
+                  <img src={wholeTreePreview} alt="Tree" className="w-full h-full object-cover" />
                 ) : (
                   <>
                     <span className="text-4xl">🌳</span>
@@ -183,6 +225,21 @@ export const TreeIdentification: React.FC<TreeIdentificationProps> = ({
               </button>
             </div>
           </div>
+
+          {/* Save to gallery toggle — only shown when the callback is wired up */}
+          {onSavePhotos && (
+            <label className="flex items-center gap-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={savePhotosToGallery}
+                onChange={(e) => setSavePhotosToGallery(e.target.checked)}
+                className="w-4 h-4 rounded accent-green-600"
+              />
+              <span className="text-sm text-[var(--text-primary)]">
+                Save photos to report gallery
+              </span>
+            </label>
+          )}
 
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
@@ -242,13 +299,7 @@ export const TreeIdentification: React.FC<TreeIdentificationProps> = ({
                   </div>
                   {!readOnly && (
                     <button
-                      onClick={() => {
-                        onApply(
-                          r.species.scientificNameWithoutAuthor,
-                          r.species.commonNames?.[0] ?? ''
-                        );
-                        onClose();
-                      }}
+                      onClick={() => handleApply(r)}
                       className="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 flex-shrink-0 transition-colors"
                     >
                       Apply
